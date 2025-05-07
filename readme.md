@@ -57,7 +57,7 @@ It's a single, mighty rule I've put together. The Python script is **embedded in
 * **CURSOR UPDATES MIGHT CHANGE THINGS:** Future Cursor versions could affect how this rule behaves. What works today might need tweaks tomorrow!
 * **IT'S ON YOU:** This is my custom rule, but you're the one using it. Use responsibly!
 
-## 🧑‍💻 About Me & This Rule (Lakshman Turlapati)
+## 🧑‍💻 About Me & This Rule
 
 This "Review Gate" rule was born from my own desire to truly partner with Cursor's AI and squeeze every ounce of value from my request quota. My goal? To make every interaction as deep and complete as possible—and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold! It was crafted through a detailed back-and-forth (with a helpful AI assistant!) to make our Cursor Agent dance to a more precise and *efficient* tune.
 
