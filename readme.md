@@ -65,4 +65,6 @@ To connect with me or learn more about my work, visit: [www.audienclature.com](h
 
 ---
 
+🎁 **For a surprise, please look at the V2 directory!**
+
 *Happy (and extended) coding with Cursor! May your AI always await your final command, your tool calls be plentifully used, and your monthly requests feel like they last forever!* ✨
