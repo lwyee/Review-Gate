@@ -46,6 +46,8 @@ If each main request can now handle the depth of what might have taken 5 separat
 **Two simple steps to supercharge your Cursor workflow:**
 
 ### Step 1: One-Click Technical Setup
+
+#### macOS Installation (Fully Tested ✅)
 ```bash
 # Clone repository and navigate to V2 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
@@ -55,11 +57,32 @@ cd Review-Gate/V2
 ./install.sh
 ```
 
+#### Windows Installation (Not extensively tested, might need manual tweaks, try it with a grain of salt)
+**PowerShell (Recommended):**
+```powershell
+# Clone repository and navigate to V2 subdirectory
+git clone https://github.com/LakshmanTurlapati/Review-Gate.git
+cd Review-Gate/V2
+
+# Run PowerShell installer (may need admin privileges)
+./install.ps1
+```
+
+**Command Prompt (Alternative):**
+```cmd
+# Clone repository and navigate to V2 subdirectory
+git clone https://github.com/LakshmanTurlapati/Review-Gate.git
+cd Review-Gate/V2
+
+# Run batch installer
+install.bat
+```
+
 The installer automatically handles:
-- ✅ **Dependencies**: Homebrew, SoX (for speech), Python packages
-- ✅ **MCP Server**: Global installation in `~/cursor-extensions/review-gate-v2/`
+- ✅ **Dependencies**: Package managers (Homebrew/Chocolatey), SoX (for speech), Python packages
+- ✅ **MCP Server**: Global installation in `~/cursor-extensions/review-gate-v2/` (macOS) or `%USERPROFILE%\cursor-extensions\review-gate-v2\` (Windows)
 - ✅ **Extension**: Cursor extension for the popup interface
-- ✅ **Configuration**: MCP integration setup
+- ✅ **Configuration**: MCP integration setup with safe merging of existing configurations
 
 ### Step 2: Copy the V2 Rule to Cursor
 
@@ -99,7 +122,7 @@ After both steps are complete:
 * **SPEECH PROCESSING IS LOCAL:** Your voice is processed locally using Faster-Whisper AI - nothing goes to the cloud.
 * **PLATFORM COMPATIBILITY:** 
   - **macOS**: Fully tested and works flawlessly ✅
-  - **Windows**: Implemented but not extensively tested (grain of salt!) ⚠️
+  - **Windows**: Implemented with PowerShell and Batch installers (Not extensively tested, might need manual tweaks, try it with a grain of salt) ⚠️
   - **Linux**: Should work but not tested
 * **PYTHON & SOX NEEDED:** The installer handles these, but your system needs to support Python 3 and SoX for speech functionality.
 * **CURSOR UPDATES MIGHT CHANGE THINGS:** Future Cursor versions could affect how this rule behaves. What works today might need tweaks tomorrow!
@@ -161,8 +184,11 @@ V2/
 ├── review_gate_v2_mcp.py      # MCP server
 ├── requirements_simple.txt     # Python dependencies
 ├── ReviewGateV2.mdc           # Global rule file (COPY THIS TO CURSOR!)
-├── install.sh                 # One-click installer
-├── uninstall.sh              # Clean uninstaller
+├── install.sh                 # One-click installer (macOS)
+├── install.ps1               # PowerShell installer (Windows)
+├── install.bat               # Batch installer (Windows)
+├── uninstall.sh              # Clean uninstaller (macOS)
+├── uninstall.ps1             # PowerShell uninstaller (Windows)
 ├── INSTALLATION.md           # Detailed manual setup guide
 ├── CLAUDE.md                 # Technical documentation
 └── README.md                 # This file
