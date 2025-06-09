@@ -80,28 +80,101 @@ echo -e "${GREEN}✅ Python environment created and dependencies installed${NC}"
 
 # Create MCP configuration
 CURSOR_MCP_FILE="$HOME/.cursor/mcp.json"
-echo -e "${YELLOW}⚙️ Creating global MCP configuration...${NC}"
+echo -e "${YELLOW}⚙️ Configuring MCP servers...${NC}"
 mkdir -p "$HOME/.cursor"
 
-# Generate MCP config with actual username
-USERNAME=$(whoami)
-cat > "$CURSOR_MCP_FILE" << EOF
-{
-  "mcpServers": {
-    "review-gate-v2": {
-      "command": "$REVIEW_GATE_DIR/venv/bin/python",
-      "args": ["$REVIEW_GATE_DIR/review_gate_v2_mcp.py"],
-      "env": {
-        "PYTHONPATH": "$REVIEW_GATE_DIR",
-        "PYTHONUNBUFFERED": "1",
-        "REVIEW_GATE_MODE": "cursor_integration"
-      }
-    }
-  }
-}
-EOF
+# Backup existing MCP configuration if it exists
+if [[ -f "$CURSOR_MCP_FILE" ]]; then
+    BACKUP_FILE="$CURSOR_MCP_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+    echo -e "${YELLOW}💾 Backing up existing MCP configuration to: $BACKUP_FILE${NC}"
+    cp "$CURSOR_MCP_FILE" "$BACKUP_FILE"
+    
+    # Check if the existing config is valid JSON
+    if ! python3 -m json.tool "$CURSOR_MCP_FILE" > /dev/null 2>&1; then
+        echo -e "${RED}⚠️ Existing MCP config has invalid JSON format${NC}"
+        echo -e "${YELLOW}💡 Creating new configuration file${NC}"
+        EXISTING_SERVERS="{}"
+    else
+        # Read existing servers
+        EXISTING_SERVERS=$(python3 -c "
+import json
+try:
+    with open('$CURSOR_MCP_FILE', 'r') as f:
+        config = json.load(f)
+    servers = config.get('mcpServers', {})
+    # Remove review-gate-v2 if it exists (we'll add the new one)
+    servers.pop('review-gate-v2', None)
+    print(json.dumps(servers, indent=2))
+except Exception as e:
+    print('{}')
+" 2>/dev/null)
+        
+        if [[ "$EXISTING_SERVERS" == "{}" ]]; then
+            echo -e "${YELLOW}📝 No existing MCP servers found or failed to parse${NC}"
+        else
+            echo -e "${GREEN}✅ Found existing MCP servers, merging configurations${NC}"
+        fi
+    fi
+else
+    echo -e "${YELLOW}📝 Creating new MCP configuration file${NC}"
+    EXISTING_SERVERS="{}"
+fi
 
-echo -e "${GREEN}✅ MCP configuration created at: $CURSOR_MCP_FILE${NC}"
+# Generate merged MCP config
+USERNAME=$(whoami)
+python3 -c "
+import json
+
+# Parse existing servers
+existing_servers = json.loads('$EXISTING_SERVERS')
+
+# Add Review Gate V2 server
+existing_servers['review-gate-v2'] = {
+    'command': '$REVIEW_GATE_DIR/venv/bin/python',
+    'args': ['$REVIEW_GATE_DIR/review_gate_v2_mcp.py'],
+    'env': {
+        'PYTHONPATH': '$REVIEW_GATE_DIR',
+        'PYTHONUNBUFFERED': '1',
+        'REVIEW_GATE_MODE': 'cursor_integration'
+    }
+}
+
+# Create final config
+config = {'mcpServers': existing_servers}
+
+# Write to file
+with open('$CURSOR_MCP_FILE', 'w') as f:
+    json.dump(config, f, indent=2)
+
+print('MCP configuration updated successfully')
+"
+
+# Validate the generated configuration
+if python3 -m json.tool "$CURSOR_MCP_FILE" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ MCP configuration updated successfully at: $CURSOR_MCP_FILE${NC}"
+    
+    # Show summary of configured servers
+    TOTAL_SERVERS=$(python3 -c "
+import json
+with open('$CURSOR_MCP_FILE', 'r') as f:
+    config = json.load(f)
+servers = config.get('mcpServers', {})
+print(f'Total MCP servers configured: {len(servers)}')
+for name in servers.keys():
+    print(f'  • {name}')
+" 2>/dev/null)
+    echo -e "${BLUE}$TOTAL_SERVERS${NC}"
+else
+    echo -e "${RED}❌ Generated MCP configuration is invalid${NC}"
+    if [[ -f "$BACKUP_FILE" ]]; then
+        echo -e "${YELLOW}🔄 Restoring from backup...${NC}"
+        cp "$BACKUP_FILE" "$CURSOR_MCP_FILE"
+        echo -e "${GREEN}✅ Backup restored${NC}"
+    else
+        echo -e "${RED}❌ No backup available, installation failed${NC}"
+        exit 1
+    fi
+fi
 
 # Test MCP server
 echo -e "${YELLOW}🧪 Testing MCP server...${NC}"
@@ -197,7 +270,7 @@ echo -e "${GREEN}✨ Enjoy your voice-activated Review Gate! ✨${NC}"
 # Final verification
 echo -e "${YELLOW}🔍 Final verification...${NC}"
 if [[ -f "$REVIEW_GATE_DIR/review_gate_v2_mcp.py" ]] && \
-   [[ -f "$CURSOR_MCP_DIR/config.json" ]] && \
+   [[ -f "$CURSOR_MCP_FILE" ]] && \
    [[ -d "$REVIEW_GATE_DIR/venv" ]]; then
     echo -e "${GREEN}✅ All components installed successfully${NC}"
     exit 0
