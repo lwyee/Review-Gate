@@ -100,15 +100,15 @@ Add the Review Gate V2 server configuration:
 ## Part 3: Cursor Extension Installation
 
 ### Step 1: Install Extension Package
-1. Copy the `review-gate-v2-2.5.1.vsix` file to a permanent location:
+1. Copy the `review-gate-v2-2.6.2.vsix` file to a permanent location:
    ```bash
-   cp /path/to/this/folder/simple-extension/review-gate-v2-2.5.1.vsix ~/cursor-extensions/review-gate-v2/
+   cp /path/to/this/folder/simple-extension/review-gate-v2-2.6.2.vsix ~/cursor-extensions/review-gate-v2/
    ```
 
 2. Open Cursor IDE
 3. Press `Cmd+Shift+P` to open command palette
 4. Type "Extensions: Install from VSIX"
-5. Select the `review-gate-v2-2.5.1.vsix` file
+5. Select the `review-gate-v2-2.6.2.vsix` file
 6. Restart Cursor when prompted
 
 ### Step 2: Verify Extension Installation
@@ -191,23 +191,46 @@ rm test.wav
 ```
 
 #### 4. Popup Not Appearing
-- Check MCP server logs: `tail -f /tmp/review_gate_v2.log`
-- Verify trigger files: `ls -la /tmp/review_gate_*`
+**macOS/Linux:**
+- Check MCP server logs: `tail -f $(python3 -c 'import tempfile; print(tempfile.gettempdir())')/review_gate_v2.log`
+- Verify trigger files: `ls -la $(python3 -c 'import tempfile; print(tempfile.gettempdir())')/review_gate_*`
+
+**Windows:**
+- Check MCP server logs: `type %TEMP%\review_gate_v2.log`
+- Verify trigger files: `dir %TEMP%\review_gate_*`
+
 - Restart both Cursor and check config paths
 
 ### Debug Commands
+
+**macOS/Linux:**
 ```bash
 # Monitor MCP server
-tail -f /tmp/review_gate_v2.log
-
-# Check extension logs
-# Open Cursor → F12 → Console
+tail -f $(python3 -c 'import tempfile; print(tempfile.gettempdir())')/review_gate_v2.log
 
 # Monitor trigger files
-watch "ls -la /tmp/review_gate_*"
+watch "ls -la $(python3 -c 'import tempfile; print(tempfile.gettempdir())')/review_gate_*"
 
 # Test microphone
 sox -d -r 16000 -c 1 test.wav trim 0 2 && rm test.wav
+```
+
+**Windows:**
+```cmd
+# Monitor MCP server
+type %TEMP%\review_gate_v2.log
+
+# Check temp files
+dir %TEMP%\review_gate_*
+
+# Test microphone (if SoX installed)
+sox -d -r 16000 -c 1 test.wav trim 0 2 && del test.wav
+```
+
+**All Platforms:**
+```
+# Check extension logs
+# Open Cursor → F12 → Console
 ```
 
 ## File Structure
@@ -216,7 +239,7 @@ After installation, your file structure should look like:
 ~/cursor-extensions/review-gate-v2/
 ├── review_gate_v2_mcp.py          # MCP server
 ├── requirements_simple.txt         # Python dependencies
-├── review-gate-v2-2.5.1.vsix      # Extension package
+├── review-gate-v2-2.6.2.vsix      # Extension package
 ├── venv/                           # Python virtual environment
 └── INSTALLATION.md                 # This file
 

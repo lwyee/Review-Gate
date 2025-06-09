@@ -1,7 +1,18 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawn } = require('child_process');
+
+// Cross-platform temp directory helper
+function getTempPath(filename) {
+    // Use /tmp/ for macOS and Linux, system temp for Windows
+    if (process.platform === 'win32') {
+        return path.join(os.tmpdir(), filename);
+    } else {
+        return path.join('/tmp', filename);
+    }
+}
 
 let chatPanel = null;
 let reviewGateWatcher = null;
@@ -62,17 +73,17 @@ function logUserInput(inputText, eventType = 'MESSAGE', triggerId = null, attach
     
     // Write to file for external monitoring
     try {
-        const logFile = '/tmp/review_gate_user_inputs.log';
+        const logFile = getTempPath('review_gate_user_inputs.log');
         fs.appendFileSync(logFile, `${logMsg}\n`);
         
         // Write response file for MCP server integration if we have a trigger ID
         if (triggerId && eventType === 'MCP_RESPONSE') {
             // Write multiple response file patterns for better compatibility
             const responsePatterns = [
-                `/tmp/review_gate_response_${triggerId}.json`,
-                `/tmp/review_gate_response.json`,  // Fallback generic response
-                `/tmp/mcp_response_${triggerId}.json`,  // Alternative pattern
-                `/tmp/mcp_response.json`  // Generic MCP response
+                getTempPath(`review_gate_response_${triggerId}.json`),
+                getTempPath('review_gate_response.json'),  // Fallback generic response
+                getTempPath(`mcp_response_${triggerId}.json`),  // Alternative pattern
+                getTempPath('mcp_response.json')  // Generic MCP response
             ];
             
             const responseData = {
@@ -128,7 +139,7 @@ function startMcpStatusMonitoring(context) {
 function checkMcpStatus() {
     try {
         // Check if MCP server log exists and is recent
-        const mcpLogPath = '/tmp/review_gate_v2.log';
+        const mcpLogPath = getTempPath('review_gate_v2.log');
         if (fs.existsSync(mcpLogPath)) {
             const stats = fs.statSync(mcpLogPath);
             const now = Date.now();
@@ -169,7 +180,7 @@ function startReviewGateIntegration(context) {
     // Silent integration start
     
     // Watch for Review Gate trigger file
-    const triggerFilePath = '/tmp/review_gate_trigger.json';
+    const triggerFilePath = getTempPath('review_gate_trigger.json');
     
     // Check for existing trigger file first
     checkTriggerFile(context, triggerFilePath);
@@ -182,7 +193,7 @@ function startReviewGateIntegration(context) {
         
         // Check backup trigger files
         for (let i = 0; i < 3; i++) {
-            const backupTriggerPath = `/tmp/review_gate_trigger_${i}.json`;
+            const backupTriggerPath = getTempPath(`review_gate_trigger_${i}.json`);
             checkTriggerFile(context, backupTriggerPath);
         }
     }, 250); // Check every 250ms for better performance
@@ -361,7 +372,7 @@ function sendExtensionAcknowledgement(triggerId, toolType) {
             popup_activated: true
         };
         
-        const ackFile = `/tmp/review_gate_ack_${triggerId}.json`;
+        const ackFile = getTempPath(`review_gate_ack_${triggerId}.json`);
         fs.writeFileSync(ackFile, JSON.stringify(ackData, null, 2));
         
         // Silent acknowledgement 
@@ -425,18 +436,18 @@ function openReviewGatePopup(context, options = {}) {
 
     // Handle messages from webview
     chatPanel.webview.onDidReceiveMessage(
-        message => {
+        webviewMessage => {
             // Get trigger ID from current trigger data or passed options
             const currentTriggerId = (currentTriggerData && currentTriggerData.trigger_id) || triggerId;
             
-            switch (message.command) {
+            switch (webviewMessage.command) {
                 case 'send':
                     
                     // Log the user input and write response file for MCP integration
                     const eventType = mcpIntegration ? 'MCP_RESPONSE' : 'REVIEW_SUBMITTED';
-                    logUserInput(message.text, eventType, currentTriggerId, message.attachments || []);
+                    logUserInput(webviewMessage.text, eventType, currentTriggerId, webviewMessage.attachments || []);
                     
-                    handleReviewMessage(message.text, message.attachments, currentTriggerId, mcpIntegration, specialHandling);
+                    handleReviewMessage(webviewMessage.text, webviewMessage.attachments, currentTriggerId, mcpIntegration, specialHandling);
                     break;
                 case 'attach':
                     logUserInput('User clicked attachment button', 'ATTACHMENT_CLICK', currentTriggerId);
@@ -455,7 +466,7 @@ function openReviewGatePopup(context, options = {}) {
                     stopNodeRecording(currentTriggerId);
                     break;
                 case 'showError':
-                    vscode.window.showErrorMessage(message.message);
+                    vscode.window.showErrorMessage(webviewMessage.message);
                     break;
                 case 'ready':
                     // Send initial MCP status
@@ -1377,7 +1388,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
             const audioBuffer = Buffer.from(base64Data, 'base64');
             
             // Save audio to temp file
-            tempAudioPath = `/tmp/review_gate_audio_${triggerId}_${Date.now()}.wav`;
+            tempAudioPath = getTempPath(`review_gate_audio_${triggerId}_${Date.now()}.wav`);
             require('fs').writeFileSync(tempAudioPath, audioBuffer);
             
             console.log(`Audio saved for transcription: ${tempAudioPath}`);
@@ -1397,7 +1408,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
             mcp_integration: true
         };
         
-        const triggerFile = `/tmp/review_gate_speech_trigger_${triggerId}.json`;
+        const triggerFile = getTempPath(`review_gate_speech_trigger_${triggerId}.json`);
         require('fs').writeFileSync(triggerFile, JSON.stringify(transcriptionRequest, null, 2));
         
         console.log(`Speech-to-text request sent: ${triggerFile}`);
@@ -1408,7 +1419,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
         let waitTime = 0;
         
         const pollForResult = setInterval(() => {
-            const resultFile = `/tmp/review_gate_speech_response_${triggerId}.json`;
+            const resultFile = getTempPath(`review_gate_speech_response_${triggerId}.json`);
             
             if (require('fs').existsSync(resultFile)) {
                 try {
@@ -1485,7 +1496,7 @@ function startNodeRecording(triggerId) {
         }
         
         const timestamp = Date.now();
-        const audioFile = `/tmp/review_gate_audio_${triggerId}_${timestamp}.wav`;
+        const audioFile = getTempPath(`review_gate_audio_${triggerId}_${timestamp}.wav`);
         
         console.log(`🎤 Starting SoX recording: ${audioFile}`);
         
