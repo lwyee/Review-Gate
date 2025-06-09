@@ -10,6 +10,9 @@ I evolved this Global Rule for our beloved Cursor IDE to transform my (and your!
 
 If each main request can now handle the depth of what might have taken 5 separate (and shallow) requests before, we're effectively **supercharging those ~500 monthly requests to feel like 2500 in terms of iterative power!** It's about making every single one count, HARD.
 
+## 🎬 Quick Demo:
+**See Review Gate V2 in action!** → https://www.youtube.com/watch?v=mZmNM-AIf4M
+
 ## ✨ Key Awesomeness (What V2 Packs In)
 
 * **🎤 Voice-Activated AI Control:** Speak your sub-prompts directly! Click the mic, speak naturally, and watch your words transcribe automatically using local Faster-Whisper AI.
