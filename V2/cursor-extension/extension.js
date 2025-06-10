@@ -1004,6 +1004,10 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             messageInput.value = '';
             attachedImages = []; // Clear attached images
             adjustTextareaHeight();
+            
+            // Ensure mic icon is visible after sending message
+            toggleMicIcon();
+            
             simulateResponse(displayMessage);
         }
         
@@ -1032,12 +1036,22 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         
         // Hide/show mic icon based on input
         function toggleMicIcon() {
+            // Don't toggle if we're currently recording or processing
+            if (isRecording || micIcon.classList.contains('processing')) {
+                return;
+            }
+            
             if (messageInput.value.trim().length > 0) {
                 micIcon.style.opacity = '0';
                 micIcon.style.pointerEvents = 'none';
             } else {
+                // Always ensure mic is visible and clickable when input is empty
                 micIcon.style.opacity = '0.7';
                 micIcon.style.pointerEvents = 'auto';
+                // Ensure proper mic icon state
+                if (!micIcon.classList.contains('fa-microphone')) {
+                    micIcon.className = 'fas fa-microphone mic-icon active';
+                }
             }
         }
         
@@ -1082,11 +1096,20 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         
         function resetMicIcon() {
             // Reset to normal microphone state
+            isRecording = false; // Ensure recording flag is cleared
             micIcon.className = 'fas fa-microphone mic-icon active';
             micIcon.title = 'Click to speak';
-            micIcon.style.opacity = '0.7';
-            micIcon.style.pointerEvents = 'auto';
             messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...';
+            
+            // Force visibility based on input state
+            if (messageInput.value.trim().length === 0) {
+                micIcon.style.opacity = '0.7';
+                micIcon.style.pointerEvents = 'auto';
+            } else {
+                micIcon.style.opacity = '0';
+                micIcon.style.pointerEvents = 'none';
+            }
+            
             console.log('🎤 Mic icon reset to normal state');
         }
         
@@ -1154,6 +1177,8 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                         adjustTextareaHeight();
                         messageInput.focus();
                         console.log('✅ Text injected into input:', message.transcription.trim());
+                        // Reset mic icon after successful transcription
+                        resetMicIcon();
                     } else if (message.error) {
                         console.error('❌ Speech transcription error:', message.error);
                         // Show error briefly in placeholder
@@ -1168,8 +1193,6 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                             resetMicIcon();
                         }, 2000);
                     }
-                    // Always reset the mic icon after processing
-                    resetMicIcon();
                     break;
             }
         });
@@ -1182,6 +1205,12 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             micIcon.title = 'Click to speak (SoX recording)';
             micIcon.classList.add('active');
             console.log('Speech recording available via SoX direct recording');
+            
+            // Ensure mic icon visibility on initialization
+            if (messageInput.value.trim().length === 0) {
+                micIcon.style.opacity = '0.7';
+                micIcon.style.pointerEvents = 'auto';
+            }
         }
         
         // Initialize

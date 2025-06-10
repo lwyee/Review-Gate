@@ -219,7 +219,7 @@ timeout /t 1 /nobreak >nul 2>&1
 echo ⚠️ MCP server test skipped (manual verification required)
 
 REM Install Cursor extension
-set "EXTENSION_FILE=%SCRIPT_DIR%\cursor-extension\review-gate-v2-2.6.2.vsix"
+set "EXTENSION_FILE=%SCRIPT_DIR%\cursor-extension\review-gate-v2-2.6.3.vsix"
 if exist "!EXTENSION_FILE!" (
     echo 🔌 Installing Cursor extension...
     copy "!EXTENSION_FILE!" "!REVIEW_GATE_DIR!\" >nul
@@ -230,7 +230,7 @@ if exist "!EXTENSION_FILE!" (
     echo 1. Open Cursor IDE
     echo 2. Press Ctrl+Shift+P
     echo 3. Type 'Extensions: Install from VSIX'
-    echo 4. Select: !REVIEW_GATE_DIR!\review-gate-v2-2.6.2.vsix
+    echo 4. Select: !REVIEW_GATE_DIR!\review-gate-v2-2.6.3.vsix
     echo 5. Restart Cursor when prompted
     echo.
     
@@ -272,7 +272,7 @@ echo.
 echo 📍 Installation Summary:
 echo    • MCP Server: !REVIEW_GATE_DIR!
 echo    • MCP Config: !CURSOR_MCP_FILE!
-echo    • Extension: !REVIEW_GATE_DIR!\review-gate-v2-2.6.2.vsix
+echo    • Extension: !REVIEW_GATE_DIR!\review-gate-v2-2.6.3.vsix
 echo    • Global Rule: !CURSOR_RULES_DIR!\ReviewGate.mdc
 echo.
 echo 🧪 Testing Your Installation:

@@ -836,9 +836,12 @@ class ReviewGateServer:
             # Create shutdown monitor task
             shutdown_task = asyncio.create_task(self._monitor_shutdown())
             
+            # Create heartbeat task to keep log file fresh for extension status monitoring
+            heartbeat_task = asyncio.create_task(self._heartbeat_logger())
+            
             # Wait for either server completion or shutdown request
             done, pending = await asyncio.wait(
-                [server_task, shutdown_task],
+                [server_task, shutdown_task, heartbeat_task],
                 return_when=asyncio.FIRST_COMPLETED
             )
             
@@ -855,6 +858,31 @@ class ReviewGateServer:
             else:
                 logger.info("🏁 Review Gate v2 server completed normally")
 
+    async def _heartbeat_logger(self):
+        """Periodically update log file to keep MCP status active in extension"""
+        logger.info("💓 Starting heartbeat logger for extension status monitoring")
+        heartbeat_count = 0
+        
+        while not self.shutdown_requested:
+            try:
+                # Update log every 10 seconds to keep file modification time fresh
+                await asyncio.sleep(10)
+                heartbeat_count += 1
+                
+                # Write heartbeat to log
+                logger.info(f"💓 MCP heartbeat #{heartbeat_count} - Server is active and ready")
+                
+                # Force log flush to ensure file is updated
+                for handler in logger.handlers:
+                    if hasattr(handler, 'flush'):
+                        handler.flush()
+                        
+            except Exception as e:
+                logger.error(f"❌ Heartbeat error: {e}")
+                await asyncio.sleep(5)
+        
+        logger.info("💔 Heartbeat logger stopped")
+    
     async def _monitor_shutdown(self):
         """Monitor for shutdown requests in a separate task"""
         while not self.shutdown_requested:
