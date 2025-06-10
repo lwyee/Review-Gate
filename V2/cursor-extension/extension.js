@@ -405,6 +405,16 @@ function openReviewGatePopup(context, options = {}) {
         // Always use consistent title
         chatPanel.title = "Review Gate";
         
+        // Set MCP status to active when revealing panel for new input
+        if (mcpIntegration) {
+            setTimeout(() => {
+                chatPanel.webview.postMessage({
+                    command: 'updateMcpStatus',
+                    active: true
+                });
+            }, 100);
+        }
+        
         // Don't send redundant messages to existing panels
         // The initial ready handler will show the message if needed
         
@@ -414,7 +424,7 @@ function openReviewGatePopup(context, options = {}) {
                 chatPanel.webview.postMessage({
                     command: 'focus'
                 });
-            }, 100);
+            }, 200);
         }
         
         return;
@@ -470,9 +480,10 @@ function openReviewGatePopup(context, options = {}) {
                     break;
                 case 'ready':
                     // Send initial MCP status
+                    // For MCP integrations, show as active when waiting for input
                     chatPanel.webview.postMessage({
                         command: 'updateMcpStatus',
-                        active: mcpStatus
+                        active: mcpIntegration ? true : mcpStatus
                     });
                     // Only send welcome message for manual opens, not MCP tool calls
                     // This prevents duplicate messages from repeated tool calls
@@ -1256,6 +1267,16 @@ function handleReviewMessage(text, attachments, triggerId, mcpIntegration, speci
                         text: `🛑 SHUTDOWN CONFIRMED: "${text}"\n\nMCP server shutdown has been approved by user.\n\nCursor Agent will proceed with graceful shutdown.`,
                         type: 'system'
                     });
+                    
+                    // Set MCP status to inactive after shutdown confirmation
+                    setTimeout(() => {
+                        if (chatPanel) {
+                            chatPanel.webview.postMessage({
+                                command: 'updateMcpStatus',
+                                active: false
+                            });
+                        }
+                    }, 1000);
                 }, 500);
             }
         } else {
@@ -1269,6 +1290,16 @@ function handleReviewMessage(text, attachments, triggerId, mcpIntegration, speci
                         text: `💡 ALTERNATIVE INSTRUCTIONS: "${text}"\n\nYour instructions have been sent to the Cursor Agent instead of shutdown confirmation.\n\nThe Agent will process your alternative request.`,
                         type: 'system'
                     });
+                    
+                    // Set MCP status to inactive after alternative instructions
+                    setTimeout(() => {
+                        if (chatPanel) {
+                            chatPanel.webview.postMessage({
+                                command: 'updateMcpStatus',
+                                active: false
+                            });
+                        }
+                    }, 1000);
                 }, 500);
             }
         }
@@ -1283,6 +1314,16 @@ function handleReviewMessage(text, attachments, triggerId, mcpIntegration, speci
                     text: `🔄 TEXT INPUT PROCESSED: "${text}"\n\nYour feedback on the ingested text has been sent to the Cursor Agent.\n\nThe Agent will continue processing with your input.`,
                     type: 'system'
                 });
+                
+                // Set MCP status to inactive after text feedback
+                setTimeout(() => {
+                    if (chatPanel) {
+                        chatPanel.webview.postMessage({
+                            command: 'updateMcpStatus',
+                            active: false
+                        });
+                    }
+                }, 1000);
             }, 500);
         }
     } else {
@@ -1302,6 +1343,16 @@ function handleReviewMessage(text, attachments, triggerId, mcpIntegration, speci
                     type: 'system',
                     plain: true  // Use plain styling for acknowledgments
                 });
+                
+                // Set MCP status to inactive after sending response
+                setTimeout(() => {
+                    if (chatPanel) {
+                        chatPanel.webview.postMessage({
+                            command: 'updateMcpStatus',
+                            active: false
+                        });
+                    }
+                }, 1000);
                 
             }, 500);
         }
