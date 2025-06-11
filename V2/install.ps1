@@ -240,7 +240,7 @@ try {
 }
 
 # Install Cursor extension
-$ExtensionFile = Join-Path $ScriptDir "cursor-extension\review-gate-v2-2.6.3.vsix"
+$ExtensionFile = Join-Path $ScriptDir "cursor-extension\review-gate-v2-2.6.4.vsix"
 if (Test-Path $ExtensionFile) {
     Write-ColorOutput "🔌 Installing Cursor extension..." "Yellow"
     
@@ -252,7 +252,7 @@ if (Test-Path $ExtensionFile) {
     Write-ColorOutput "1. Open Cursor IDE" "White"
     Write-ColorOutput "2. Press Ctrl+Shift+P" "White"
     Write-ColorOutput "3. Type 'Extensions: Install from VSIX'" "White"
-    Write-ColorOutput "4. Select: $ReviewGateDir\review-gate-v2-2.6.3.vsix" "White"
+    Write-ColorOutput "4. Select: $ReviewGateDir\review-gate-v2-2.6.4.vsix" "White"
     Write-ColorOutput "5. Restart Cursor when prompted" "White"
     Write-Host ""
     
@@ -304,7 +304,7 @@ Write-Host ""
 Write-ColorOutput "📍 Installation Summary:" "Cyan"
 Write-ColorOutput "   • MCP Server: $ReviewGateDir" "White"
 Write-ColorOutput "   • MCP Config: $CursorMcpFile" "White"
-Write-ColorOutput "   • Extension: $ReviewGateDir\review-gate-v2-2.6.3.vsix" "White"
+Write-ColorOutput "   • Extension: $ReviewGateDir\review-gate-v2-2.6.4.vsix" "White"
 Write-ColorOutput "   • Global Rule: $CursorRulesDir\ReviewGate.mdc" "White"
 Write-Host ""
 Write-ColorOutput "🧪 Testing Your Installation:" "Cyan"

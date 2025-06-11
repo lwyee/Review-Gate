@@ -122,11 +122,16 @@ fi
 
 # Generate merged MCP config
 USERNAME=$(whoami)
+# Write existing servers to temporary file to avoid shell expansion issues
+echo "$EXISTING_SERVERS" > /tmp/existing_mcp_servers.json
+
 python3 -c "
 import json
+import os
 
-# Parse existing servers
-existing_servers = json.loads('$EXISTING_SERVERS')
+# Read existing servers from file (avoids shell expansion issues)
+with open('/tmp/existing_mcp_servers.json', 'r') as f:
+    existing_servers = json.load(f)
 
 # Add Review Gate V2 server
 existing_servers['review-gate-v2'] = {
@@ -147,6 +152,9 @@ with open('$CURSOR_MCP_FILE', 'w') as f:
     json.dump(config, f, indent=2)
 
 print('MCP configuration updated successfully')
+
+# Clean up temporary file
+os.unlink('/tmp/existing_mcp_servers.json')
 "
 
 # Validate the generated configuration
@@ -192,7 +200,7 @@ fi
 rm -f "$TEMP_DIR/mcp_test.log"
 
 # Install Cursor extension
-EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-2.6.3.vsix"
+EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-2.6.4.vsix"
 if [[ -f "$EXTENSION_FILE" ]]; then
     echo -e "${YELLOW}🔌 Installing Cursor extension...${NC}"
     
@@ -204,7 +212,7 @@ if [[ -f "$EXTENSION_FILE" ]]; then
     echo -e "1. Open Cursor IDE"
     echo -e "2. Press Cmd+Shift+P"
     echo -e "3. Type 'Extensions: Install from VSIX'"
-    echo -e "4. Select: $REVIEW_GATE_DIR/review-gate-v2-2.6.3.vsix"
+    echo -e "4. Select: $REVIEW_GATE_DIR/review-gate-v2-2.6.4.vsix"
     echo -e "5. Restart Cursor when prompted"
     echo ""
     
@@ -244,7 +252,7 @@ echo ""
 echo -e "${BLUE}📍 Installation Summary:${NC}"
 echo -e "   • MCP Server: $REVIEW_GATE_DIR"
 echo -e "   • MCP Config: $CURSOR_MCP_FILE"
-echo -e "   • Extension: $REVIEW_GATE_DIR/review-gate-v2-2.6.3.vsix"
+echo -e "   • Extension: $REVIEW_GATE_DIR/review-gate-v2-2.6.4.vsix"
 echo -e "   • Global Rule: $CURSOR_RULES_DIR/ReviewGate.mdc"
 echo ""
 echo -e "${BLUE}🧪 Testing Your Installation:${NC}"

@@ -82,7 +82,7 @@ cd %USERPROFILE%\cursor-extensions\review-gate-v2
 Copy these files from the downloaded Review-Gate/V2 folder to your installation directory:
 - `review_gate_v2_mcp.py` - The MCP server
 - `requirements_simple.txt` - Python dependencies
-- `cursor-extension/review-gate-v2-2.6.3.vsix` - Cursor extension
+- `cursor-extension/review-gate-v2-2.6.4.vsix` - Cursor extension
 
 ### Step 3: Set Up Python Environment
 
@@ -188,7 +188,7 @@ Add this configuration (replace paths with your actual paths):
 2. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
 3. Type "Extensions: Install from VSIX"
 4. Navigate to your installation directory
-5. Select `review-gate-v2-2.6.3.vsix`
+5. Select `review-gate-v2-2.6.4.vsix`
 6. Restart Cursor when prompted
 
 ### Step 7: Verify Installation
@@ -337,7 +337,7 @@ After installation, files should be in these locations:
 ~/cursor-extensions/review-gate-v2/
   - review_gate_v2_mcp.py
   - requirements_simple.txt
-  - review-gate-v2-2.6.3.vsix
+  - review-gate-v2-2.6.4.vsix
   - venv/
 
 ~/.cursor/
@@ -352,7 +352,7 @@ Log file: /tmp/review_gate_v2.log
 %USERPROFILE%\cursor-extensions\review-gate-v2\
   - review_gate_v2_mcp.py
   - requirements_simple.txt
-  - review-gate-v2-2.6.3.vsix
+  - review-gate-v2-2.6.4.vsix
   - venv\
 
 %USERPROFILE%\.cursor\
