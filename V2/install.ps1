@@ -56,6 +56,7 @@ if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) {
 Write-ColorOutput "🎤 Installing SoX for speech-to-text..." "Yellow"
 if (-not (Get-Command sox -ErrorAction SilentlyContinue)) {
     try {
+        scoop bucket add extras
         scoop install sox
         Write-ColorOutput "✅ SoX installed successfully" "Green"
     } catch {
