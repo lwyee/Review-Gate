@@ -895,7 +895,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         }
         
         body.drag-over::before {
-            content: '📋 Drop images here to attach them';
+            content: '\\f093  Drop images here to attach them';
             position: fixed;
             top: 50%;
             left: 50%;
@@ -909,6 +909,8 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             z-index: 1000;
             pointer-events: none;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
         }
         
         /* Image preview styling */
@@ -988,7 +990,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         <div class="input-container" id="inputContainer">
             <div class="input-wrapper">
                 <i id="micIcon" class="fas fa-microphone mic-icon active" title="Click to speak"></i>
-                <textarea id="messageInput" class="message-input" placeholder="${mcpIntegration ? 'Cursor Agent is waiting for your response... (Paste images with Ctrl+V)' : 'Type your review or feedback... (Paste images with Ctrl+V)'}" rows="1"></textarea>
+                <textarea id="messageInput" class="message-input" placeholder="${mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...'}" rows="1"></textarea>
                 <button id="attachButton" class="attach-button" title="Upload image">
                     <i class="fas fa-image"></i>
                 </button>
@@ -1029,7 +1031,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                 messageInput.disabled = false;
                 sendButton.disabled = false;
                 attachButton.disabled = false;
-                messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response... (Paste images with Ctrl+V)' : 'Type your review or feedback... (Paste images with Ctrl+V)';
+                messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...';
             } else {
                 statusIndicator.classList.remove('active');
                 mcpStatus.textContent = 'MCP Inactive';
@@ -1168,12 +1170,11 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         function updateImageCounter() {
             const count = attachedImages.length;
             const baseText = mcpIntegration ? 'Cursor Agent is waiting for your response' : 'Type your review or feedback';
-            const pasteHint = '(Paste images with Ctrl+V)';
             
             if (count > 0) {
-                messageInput.placeholder = \`\${baseText}... \${count} image(s) attached \${pasteHint}\`;
+                messageInput.placeholder = \`\${baseText}... \${count} image(s) attached\`;
             } else {
-                messageInput.placeholder = \`\${baseText}... \${pasteHint}\`;
+                messageInput.placeholder = \`\${baseText}...\`;
             }
         }
         
@@ -1386,7 +1387,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             isRecording = false; // Ensure recording flag is cleared
             micIcon.className = 'fas fa-microphone mic-icon active';
             micIcon.title = 'Click to speak';
-            messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response... (Paste images with Ctrl+V)' : 'Type your review or feedback... (Paste images with Ctrl+V)';
+            messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...';
             
             // Force visibility based on input state
             if (messageInput.value.trim().length === 0) {
@@ -1451,7 +1452,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                     addMessage(message.text, message.type || 'system', message.toolData, message.plain || false);
                     if (message.mcpIntegration) {
                         mcpIntegration = true;
-                        messageInput.placeholder = 'Cursor Agent is waiting for your response... (Paste images with Ctrl+V)';
+                        messageInput.placeholder = 'Cursor Agent is waiting for your response...';
                     }
                     break;
                 case 'focus':
