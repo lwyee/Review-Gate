@@ -345,6 +345,7 @@ function handleReviewGateToolCall(context, toolData) {
     
     // Add trigger ID to popup options
     popupOptions.triggerId = toolData.trigger_id;
+    console.log(`🔍 DEBUG: Setting popup triggerId to: ${toolData.trigger_id}`);
     
     // Force consistent title regardless of tool call
     popupOptions.title = "Review Gate";
@@ -394,8 +395,13 @@ function openReviewGatePopup(context, options = {}) {
     } = options;
     
     // Store trigger ID in current trigger data for use in message handlers
+    console.log(`🔍 DEBUG: openReviewGatePopup triggerId: ${triggerId}`);
+    console.log(`🔍 DEBUG: openReviewGatePopup toolData:`, toolData);
     if (triggerId) {
         currentTriggerData = { ...toolData, trigger_id: triggerId };
+        console.log(`🔍 DEBUG: Set currentTriggerData:`, currentTriggerData);
+    } else {
+        console.log(`🔍 DEBUG: No triggerId provided, currentTriggerData not updated`);
     }
 
     // Silent popup opening
@@ -449,6 +455,9 @@ function openReviewGatePopup(context, options = {}) {
         webviewMessage => {
             // Get trigger ID from current trigger data or passed options
             const currentTriggerId = (currentTriggerData && currentTriggerData.trigger_id) || triggerId;
+            console.log(`🔍 DEBUG: Speech command - currentTriggerData:`, currentTriggerData);
+            console.log(`🔍 DEBUG: Speech command - triggerId:`, triggerId);
+            console.log(`🔍 DEBUG: Speech command - currentTriggerId:`, currentTriggerId);
             
             switch (webviewMessage.command) {
                 case 'send':
@@ -686,6 +695,17 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             color: var(--vscode-foreground);
         }
         
+        /* Speech error message styling */
+        .message.system.plain .message-content[data-speech-error] {
+            background: rgba(255, 107, 53, 0.1);
+            border: 1px solid rgba(255, 107, 53, 0.3);
+            color: var(--vscode-errorForeground);
+            font-weight: 500;
+            opacity: 1;
+            padding: 12px 16px;
+            border-radius: 8px;
+        }
+        
         .message-time {
             font-size: 11px;
             opacity: 0.6;
@@ -895,20 +915,33 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         }
         
         body.drag-over::before {
-            content: '\\f093  Drop images here to attach them';
+            content: 'Drop images here to attach them';
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             background: var(--vscode-badge-background);
             color: var(--vscode-badge-foreground);
-            padding: 16px 24px;
+            padding: 16px 24px 16px 48px;
             border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
             z-index: 1000;
             pointer-events: none;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-family: var(--vscode-font-family);
+        }
+        
+        body.drag-over::after {
+            content: '\\f093';
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) translate(-120px, 0);
+            color: var(--vscode-badge-foreground);
+            font-size: 16px;
+            z-index: 1001;
+            pointer-events: none;
             font-family: 'Font Awesome 6 Free';
             font-weight: 900;
         }
@@ -1043,7 +1076,7 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             }
         }
         
-        function addMessage(text, type = 'user', toolData = null, plain = false) {
+        function addMessage(text, type = 'user', toolData = null, plain = false, isError = false) {
             messageCount++;
             const messageDiv = document.createElement('div');
             messageDiv.className = \`message \${type}\${plain ? ' plain' : ''}\`;
@@ -1051,6 +1084,11 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             const contentDiv = document.createElement('div');
             contentDiv.className = plain ? 'message-content' : 'message-bubble';
             contentDiv.textContent = text;
+            
+            // Add special styling for speech errors
+            if (isError && plain) {
+                contentDiv.setAttribute('data-speech-error', 'true');
+            }
             
             messageDiv.appendChild(contentDiv);
             
@@ -1064,6 +1102,33 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             
             messagesContainer.appendChild(messageDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function addSpeechError(errorMessage) {
+            // Add prominent error message with special styling
+            addMessage('🎤 Speech Error: ' + errorMessage, 'system', null, true, true);
+            
+            // Add helpful troubleshooting tips based on error type
+            let tip = '';
+            if (errorMessage.includes('permission') || errorMessage.includes('Permission')) {
+                tip = '💡 Grant microphone access in system settings';
+            } else if (errorMessage.includes('busy') || errorMessage.includes('device')) {
+                tip = '💡 Close other recording apps and try again';
+            } else if (errorMessage.includes('SoX') || errorMessage.includes('sox')) {
+                tip = '💡 SoX audio tool may need to be installed or updated';
+            } else if (errorMessage.includes('timeout')) {
+                tip = '💡 Try speaking more clearly or check microphone connection';
+            } else if (errorMessage.includes('Whisper') || errorMessage.includes('transcription')) {
+                tip = '💡 Speech-to-text service may be unavailable';
+            } else {
+                tip = '💡 Check microphone permissions and try again';
+            }
+            
+            if (tip) {
+                setTimeout(() => {
+                    addMessage(tip, 'system', null, true);
+                }, 500);
+            }
         }
         
         function showTyping() {
@@ -1479,17 +1544,29 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                         resetMicIcon();
                     } else if (message.error) {
                         console.error('❌ Speech transcription error:', message.error);
-                        // Show error briefly in placeholder
-                        messageInput.placeholder = 'Error: ' + message.error;
+                        
+                        // Show prominent error message in chat
+                        addSpeechError(message.error);
+                        
+                        // Also show in placeholder briefly
+                        const originalPlaceholder = messageInput.placeholder;
+                        messageInput.placeholder = 'Speech failed - try again';
                         setTimeout(() => {
+                            messageInput.placeholder = originalPlaceholder;
                             resetMicIcon();
-                        }, 2000);
+                        }, 3000);
                     } else {
                         console.log('⚠️ Empty transcription received');
+                        
+                        // Show helpful message in chat
+                        addMessage('🎤 No speech detected - please speak clearly and try again', 'system', null, true);
+                        
+                        const originalPlaceholder = messageInput.placeholder;
                         messageInput.placeholder = 'No speech detected - try again';
                         setTimeout(() => {
+                            messageInput.placeholder = originalPlaceholder;
                             resetMicIcon();
-                        }, 2000);
+                        }, 3000);
                     }
                     break;
             }
@@ -1759,7 +1836,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
             
             // Save audio to temp file
             tempAudioPath = getTempPath(`review_gate_audio_${triggerId}_${Date.now()}.wav`);
-            require('fs').writeFileSync(tempAudioPath, audioBuffer);
+            fs.writeFileSync(tempAudioPath, audioBuffer);
             
             console.log(`Audio saved for transcription: ${tempAudioPath}`);
         }
@@ -1779,7 +1856,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
         };
         
         const triggerFile = getTempPath(`review_gate_speech_trigger_${triggerId}.json`);
-        require('fs').writeFileSync(triggerFile, JSON.stringify(transcriptionRequest, null, 2));
+        fs.writeFileSync(triggerFile, JSON.stringify(transcriptionRequest, null, 2));
         
         console.log(`Speech-to-text request sent: ${triggerFile}`);
         
@@ -1791,9 +1868,9 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
         const pollForResult = setInterval(() => {
             const resultFile = getTempPath(`review_gate_speech_response_${triggerId}.json`);
             
-            if (require('fs').existsSync(resultFile)) {
+            if (fs.existsSync(resultFile)) {
                 try {
-                    const result = JSON.parse(require('fs').readFileSync(resultFile, 'utf8'));
+                    const result = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
                     
                     if (result.transcription) {
                         // Send transcription back to webview
@@ -1808,10 +1885,22 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
                         logUserInput(`Speech transcribed: ${result.transcription}`, 'SPEECH_TRANSCRIBED', triggerId);
                     }
                     
-                    // Cleanup
-                    require('fs').unlinkSync(resultFile);
-                    require('fs').unlinkSync(tempAudioPath);
-                    require('fs').unlinkSync(triggerFile);
+                    // Cleanup - let MCP server handle audio file cleanup to avoid race conditions
+                    try {
+                        fs.unlinkSync(resultFile);
+                        console.log('✅ Cleaned up speech response file');
+                    } catch (e) {
+                        console.log(`Could not clean up response file: ${e.message}`);
+                    }
+                    
+                    try {
+                        fs.unlinkSync(triggerFile);
+                        console.log('✅ Cleaned up speech trigger file');
+                    } catch (e) {
+                        console.log(`Could not clean up trigger file: ${e.message}`);
+                    }
+                    
+                    // Note: Audio file cleanup is handled by MCP server to avoid race conditions
                     
                 } catch (error) {
                     console.log(`Error reading transcription result: ${error.message}`);
@@ -1831,11 +1920,14 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
                 }
                 clearInterval(pollForResult);
                 
-                // Cleanup on timeout
+                // Cleanup on timeout - only clean up trigger file
                 try {
-                    require('fs').unlinkSync(tempAudioPath);
-                    require('fs').unlinkSync(triggerFile);
-                } catch (e) {}
+                    fs.unlinkSync(triggerFile);
+                    console.log('✅ Cleaned up trigger file on timeout');
+                } catch (e) {
+                    console.log(`Could not clean up trigger file on timeout: ${e.message}`);
+                }
+                // Note: Audio file cleanup handled by MCP server or OS temp cleanup
             }
         }, pollInterval);
         
@@ -1850,7 +1942,92 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
     }
 }
 
-function startNodeRecording(triggerId) {
+async function validateSoxSetup() {
+    /**
+     * Validate SoX installation and microphone access
+     * Returns: {success: boolean, error: string}
+     */
+    return new Promise((resolve) => {
+        try {
+            // Test if sox command exists
+            const testProcess = spawn('sox', ['--version'], { stdio: 'pipe' });
+            
+            let soxVersion = '';
+            testProcess.stdout.on('data', (data) => {
+                soxVersion += data.toString();
+            });
+            
+            testProcess.on('close', (code) => {
+                if (code !== 0) {
+                    resolve({ success: false, error: 'SoX command not found or failed' });
+                    return;
+                }
+                
+                console.log(`✅ SoX found: ${soxVersion.trim()}`);
+                
+                // Test microphone access with a very short recording
+                const testFile = getTempPath(`review_gate_test_${Date.now()}.wav`);
+                const micTestProcess = spawn('sox', ['-d', '-r', '16000', '-c', '1', testFile, 'trim', '0', '0.1'], { stdio: 'pipe' });
+                
+                let testError = '';
+                micTestProcess.stderr.on('data', (data) => {
+                    testError += data.toString();
+                });
+                
+                micTestProcess.on('close', (testCode) => {
+                    // Clean up test file
+                    try {
+                        if (fs.existsSync(testFile)) {
+                            fs.unlinkSync(testFile);
+                        }
+                    } catch (e) {}
+                    
+                    if (testCode !== 0) {
+                        let errorMsg = 'Microphone access failed';
+                        if (testError.includes('Permission denied')) {
+                            errorMsg = 'Microphone permission denied - please allow microphone access in system settings';
+                        } else if (testError.includes('No such device')) {
+                            errorMsg = 'No microphone device found';
+                        } else if (testError.includes('Device or resource busy')) {
+                            errorMsg = 'Microphone is busy - close other recording applications';
+                        } else if (testError) {
+                            errorMsg = `Microphone test failed: ${testError.substring(0, 100)}`;
+                        }
+                        resolve({ success: false, error: errorMsg });
+                    } else {
+                        console.log('✅ Microphone access test successful');
+                        resolve({ success: true, error: null });
+                    }
+                });
+                
+                // Timeout for microphone test
+                setTimeout(() => {
+                    try {
+                        micTestProcess.kill('SIGTERM');
+                        resolve({ success: false, error: 'Microphone test timed out' });
+                    } catch (e) {}
+                }, 3000);
+            });
+            
+            testProcess.on('error', (error) => {
+                resolve({ success: false, error: `SoX not installed: ${error.message}` });
+            });
+            
+            // Timeout for version check
+            setTimeout(() => {
+                try {
+                    testProcess.kill('SIGTERM');
+                    resolve({ success: false, error: 'SoX version check timed out' });
+                } catch (e) {}
+            }, 2000);
+            
+        } catch (error) {
+            resolve({ success: false, error: `SoX validation error: ${error.message}` });
+        }
+    });
+}
+
+async function startNodeRecording(triggerId) {
     try {
         if (currentRecording) {
             console.log('Recording already in progress');
@@ -1864,6 +2041,22 @@ function startNodeRecording(triggerId) {
             }
             return;
         }
+        
+        // Validate SoX setup before recording
+        console.log('🔍 Validating SoX and microphone setup...');
+        const validation = await validateSoxSetup();
+        if (!validation.success) {
+            console.log(`❌ SoX validation failed: ${validation.error}`);
+            if (chatPanel) {
+                chatPanel.webview.postMessage({
+                    command: 'speechTranscribed',
+                    transcription: '',
+                    error: validation.error
+                });
+            }
+            return;
+        }
+        console.log('✅ SoX validation successful - proceeding with recording');
         
         const timestamp = Date.now();
         const audioFile = getTempPath(`review_gate_audio_${triggerId}_${timestamp}.wav`);

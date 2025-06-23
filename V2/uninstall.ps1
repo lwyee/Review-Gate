@@ -5,17 +5,17 @@
 # Enable strict error handling
 $ErrorActionPreference = "Stop"
 
-# Function to write colored output
-function Write-ColorOutput {
-    param(
-        [string]$Message,
-        [string]$Color = "White"
-    )
-    Write-Host $Message -ForegroundColor $Color
-}
+# Enhanced color logging functions
+function Write-Error-Log { param([string]$Message) Write-Host "ERROR: $Message" -ForegroundColor Red }
+function Write-Success-Log { param([string]$Message) Write-Host "SUCCESS: $Message" -ForegroundColor Green }
+function Write-Info-Log { param([string]$Message) Write-Host "INFO: $Message" -ForegroundColor Yellow }
+function Write-Progress-Log { param([string]$Message) Write-Host "PROGRESS: $Message" -ForegroundColor Cyan }
+function Write-Warning-Log { param([string]$Message) Write-Host "WARNING: $Message" -ForegroundColor Yellow }
+function Write-Step-Log { param([string]$Message) Write-Host "$Message" -ForegroundColor White }
+function Write-Header-Log { param([string]$Message) Write-Host "$Message" -ForegroundColor Cyan }
 
-Write-ColorOutput "🗑️ Review Gate V2 - Windows Uninstallation" "Cyan"
-Write-ColorOutput "==========================================" "Cyan"
+Write-Header-Log "Review Gate V2 - Windows Uninstallation"
+Write-Header-Log "======================================="
 Write-Host ""
 
 # Define paths
@@ -26,27 +26,27 @@ $CursorRulesDir = Join-Path $env:APPDATA "Cursor\User\rules"
 
 # Remove MCP server directory
 if (Test-Path $ReviewGateDir) {
-    Write-ColorOutput "🗂️ Removing Review Gate installation directory..." "Yellow"
+    Write-Progress-Log "Removing Review Gate installation directory..."
     try {
         Remove-Item $ReviewGateDir -Recurse -Force
-        Write-ColorOutput "✅ Installation directory removed" "Green"
+        Write-Success-Log "Installation directory removed"
     } catch {
-        Write-ColorOutput "❌ Failed to remove installation directory" "Red"
-        Write-ColorOutput "💡 Please remove manually: $ReviewGateDir" "Yellow"
+        Write-Error-Log "Failed to remove installation directory"
+        Write-Info-Log "Please remove manually: $ReviewGateDir"
     }
 } else {
-    Write-ColorOutput "ℹ️ Installation directory not found" "Gray"
+    Write-Info-Log "Installation directory not found"
 }
 
 # Remove from MCP configuration
 if (Test-Path $CursorMcpFile) {
-    Write-ColorOutput "⚙️ Removing from MCP configuration..." "Yellow"
+    Write-Progress-Log "Removing from MCP configuration..."
     
     # Backup current config
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $BackupFile = "$CursorMcpFile.backup_before_uninstall.$timestamp"
     Copy-Item $CursorMcpFile $BackupFile -Force
-    Write-ColorOutput "💾 Backup created: $BackupFile" "Gray"
+    Write-Info-Log "Backup created: $BackupFile"
     
     try {
         $config = Get-Content $CursorMcpFile -Raw | ConvertFrom-Json
@@ -59,62 +59,99 @@ if (Test-Path $CursorMcpFile) {
             }
             
             $config | ConvertTo-Json -Depth 10 | Set-Content $CursorMcpFile -Encoding UTF8
-            Write-ColorOutput "✅ Removed from MCP configuration" "Green"
+            Write-Success-Log "Removed from MCP configuration"
             
             $remainingCount = $config.mcpServers.PSObject.Properties.Name.Count
-            Write-ColorOutput "Remaining MCP servers: $remainingCount" "Cyan"
+            Write-Header-Log "Remaining MCP servers: $remainingCount"
         } else {
-            Write-ColorOutput "ℹ️ Review Gate not found in MCP configuration" "Gray"
+            Write-Info-Log "Review Gate not found in MCP configuration"
         }
     } catch {
-        Write-ColorOutput "❌ Failed to update MCP configuration" "Red"
-        Write-ColorOutput "💡 Please remove manually or restore from backup" "Yellow"
+        Write-Error-Log "Failed to update MCP configuration"
+        Write-Info-Log "Please remove manually or restore from backup"
     }
 } else {
-    Write-ColorOutput "ℹ️ MCP configuration file not found" "Gray"
+    Write-Info-Log "MCP configuration file not found"
 }
 
 # Remove global rule
 $ruleFile = Join-Path $CursorRulesDir "ReviewGate.mdc"
 if (Test-Path $ruleFile) {
-    Write-ColorOutput "📜 Removing global rule..." "Yellow"
+    Write-Progress-Log "Removing global rule..."
     try {
         Remove-Item $ruleFile -Force
-        Write-ColorOutput "✅ Global rule removed" "Green"
+        Write-Success-Log "Global rule removed"
     } catch {
-        Write-ColorOutput "❌ Failed to remove global rule" "Red"
-        Write-ColorOutput "💡 Please remove manually: $ruleFile" "Yellow"
+        Write-Error-Log "Failed to remove global rule"
+        Write-Info-Log "Please remove manually: $ruleFile"
     }
 } else {
-    Write-ColorOutput "ℹ️ Global rule not found" "Gray"
+    Write-Info-Log "Global rule not found"
 }
 
 # Clean up temporary files
-Write-ColorOutput "🧹 Cleaning up temporary files..." "Yellow"
+Write-Progress-Log "Cleaning up temporary files..."
 Get-ChildItem $env:TEMP -Filter "review_gate_*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 Get-ChildItem $env:TEMP -Filter "mcp_response*" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-Write-ColorOutput "✅ Temporary files cleaned" "Green"
+Write-Success-Log "Temporary files cleaned"
+
+# Try automated extension removal
+$ExtensionRemoved = $false
+$cursorPaths = @(
+    "${env:ProgramFiles}\Cursor\resources\app\bin\cursor.cmd",
+    "${env:LOCALAPPDATA}\Programs\cursor\resources\app\bin\cursor.cmd",
+    "${env:ProgramFiles(x86)}\Cursor\resources\app\bin\cursor.cmd"
+)
+
+foreach ($cursorCmd in $cursorPaths) {
+    if (Test-Path $cursorCmd) {
+        Write-Progress-Log "Attempting automated extension removal..."
+        try {
+            & $cursorCmd --uninstall-extension "review-gate-v2" | Out-Null
+            Write-Success-Log "Extension removed automatically via command line"
+            $ExtensionRemoved = $true
+            break
+        } catch {
+            Write-Warning-Log "Automated removal failed: $($_.Exception.Message)"
+        }
+    }
+}
+
+if (-not $ExtensionRemoved) {
+    Write-Warning-Log "Automated extension removal failed, manual steps required"
+}
 
 Write-Host ""
-Write-ColorOutput "📋 MANUAL STEPS REQUIRED:" "Cyan"
-Write-ColorOutput "1. Open Cursor IDE" "White"
-Write-ColorOutput "2. Press Ctrl+Shift+X to open Extensions" "White"
-Write-ColorOutput "3. Search for 'Review Gate' and uninstall the extension" "White"
-Write-ColorOutput "4. Restart Cursor when prompted" "White"
-Write-Host ""
+if (-not $ExtensionRemoved) {
+    Write-Header-Log "MANUAL STEPS REQUIRED:"
+    Write-Step-Log "1. Open Cursor IDE"
+    Write-Step-Log "2. Press Ctrl+Shift+X to open Extensions"
+    Write-Step-Log "3. Search for 'Review Gate' and uninstall the extension"
+    Write-Step-Log "4. Restart Cursor when prompted"
+    Write-Host ""
+}
 
-Write-ColorOutput "🎉 Review Gate V2 Uninstallation Complete!" "Green"
-Write-ColorOutput "=========================================" "Green"
+Write-Success-Log "Review Gate V2 Uninstallation Complete!"
+Write-Header-Log "========================================="
 Write-Host ""
-Write-ColorOutput "📍 What was removed:" "Cyan"
-Write-ColorOutput "   • Installation directory: $ReviewGateDir" "White"
-Write-ColorOutput "   • MCP server configuration entry" "White"
-Write-ColorOutput "   • Global rule file" "White"
-Write-ColorOutput "   • Temporary files" "White"
+Write-Header-Log "What was removed:"
+Write-Step-Log "   - Installation directory: $ReviewGateDir"
+Write-Step-Log "   - MCP server configuration entry"
+Write-Step-Log "   - Global rule file"
+Write-Step-Log "   - Temporary files"
 Write-Host ""
-Write-ColorOutput "📍 What remains (manual removal needed):" "Cyan"
-Write-ColorOutput "   • Cursor extension (remove via Extensions panel)" "White"
-Write-ColorOutput "   • SoX installation (if you want to remove it)" "White"
-Write-ColorOutput "   • Python virtual environment dependencies" "White"
+Write-Header-Log "What remains (if any):"
+if (-not $ExtensionRemoved) {
+    Write-Step-Log "   - Cursor extension (manual removal required)"
+} else {
+    Write-Step-Log "   - All extension components removed successfully!"
+}
+Write-Step-Log "   - SoX installation (keep if needed for other apps)"
+Write-Step-Log "   - Python virtual environment dependencies"
 Write-Host ""
-Write-ColorOutput "💡 Configuration backups are preserved for safety" "Yellow"
+Write-Info-Log "Configuration backups are preserved for safety"
+if (-not $ExtensionRemoved) {
+    Write-Info-Log "Extension must be removed manually from Cursor"
+} else {
+    Write-Success-Log "All components removed successfully!"
+}

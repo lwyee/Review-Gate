@@ -94,17 +94,14 @@ class ReviewGateServer:
         self._last_attachments = []
         self._whisper_model = None
         
-        # Initialize Whisper model if available
+        # Initialize Whisper model with comprehensive error handling
+        self._whisper_error = None
         if WHISPER_AVAILABLE:
-            try:
-                logger.info("🎤 Loading Faster-Whisper model for speech-to-text...")
-                self._whisper_model = WhisperModel("base", device="cpu", compute_type="int8")  # Using base model for balance of speed/accuracy
-                logger.info("✅ Faster-Whisper model loaded successfully")
-            except Exception as e:
-                logger.error(f"❌ Failed to load Whisper model: {e}")
-                self._whisper_model = None
+            self._whisper_model = self._initialize_whisper_model()
         else:
-            logger.warning("⚠️ Whisper not available - speech-to-text will be disabled")
+            logger.warning("⚠️ Faster-Whisper not available - speech-to-text will be disabled")
+            logger.warning("💡 To enable speech features, install: pip install faster-whisper")
+            self._whisper_error = "faster-whisper package not installed"
             
         # Start speech trigger monitoring
         self._start_speech_monitoring()
@@ -114,6 +111,65 @@ class ReviewGateServer:
         for handler in logger.handlers:
             if hasattr(handler, 'flush'):
                 handler.flush()
+
+    def _initialize_whisper_model(self):
+        """Initialize Whisper model with comprehensive error handling and fallbacks"""
+        try:
+            logger.info("🎤 Loading Faster-Whisper model for speech-to-text...")
+            
+            # Try different model configurations in order of preference
+            model_configs = [
+                {"model": "base", "device": "cpu", "compute_type": "int8"},
+                {"model": "tiny", "device": "cpu", "compute_type": "int8"},
+                {"model": "base", "device": "cpu", "compute_type": "float32"},
+                {"model": "tiny", "device": "cpu", "compute_type": "float32"},
+            ]
+            
+            for i, config in enumerate(model_configs):
+                try:
+                    logger.info(f"🔄 Attempting to load {config['model']} model (attempt {i+1}/{len(model_configs)})")
+                    model = WhisperModel(config['model'], device=config['device'], compute_type=config['compute_type'])
+                    
+                    # Test the model with a quick inference to ensure it works
+                    logger.info(f"✅ Successfully loaded {config['model']} model with {config['compute_type']}")
+                    logger.info(f"📊 Model info - Device: {config['device']}, Compute: {config['compute_type']}")
+                    return model
+                    
+                except Exception as model_error:
+                    logger.warning(f"⚠️ Failed to load {config['model']} model: {model_error}")
+                    if i == len(model_configs) - 1:
+                        # This was the last attempt
+                        raise model_error
+                    continue
+            
+        except ImportError as import_error:
+            error_msg = f"faster-whisper import failed: {import_error}"
+            logger.error(f"❌ {error_msg}")
+            self._whisper_error = error_msg
+            return None
+            
+        except Exception as e:
+            error_msg = f"Whisper model initialization failed: {e}"
+            logger.error(f"❌ {error_msg}")
+            
+            # Check for common issues and provide specific guidance
+            if "CUDA" in str(e):
+                logger.error("💡 CUDA issue detected - make sure you have CPU-only version")
+                logger.error("💡 Try: pip uninstall faster-whisper && pip install faster-whisper")
+                error_msg += " (CUDA compatibility issue)"
+            elif "Visual Studio" in str(e) or "MSVC" in str(e):
+                logger.error("💡 Visual C++ issue detected on Windows")
+                logger.error("💡 Install Visual Studio Build Tools or use pre-built wheels")
+                error_msg += " (Visual C++ dependency missing)"
+            elif "Permission" in str(e):
+                logger.error("💡 Permission issue - check file access and antivirus")
+                error_msg += " (Permission denied)"
+            elif "disk space" in str(e).lower() or "no space" in str(e).lower():
+                logger.error("💡 Disk space issue - whisper models require storage")
+                error_msg += " (Insufficient disk space)"
+            
+            self._whisper_error = error_msg
+            return None
 
     def setup_handlers(self):
         """Set up MCP request handlers"""
@@ -902,7 +958,23 @@ class ReviewGateServer:
             for temp_file in temp_files:
                 if Path(temp_file).exists():
                     Path(temp_file).unlink()
-                    logger.info(f"🗑️ Cleaned up: {temp_file}")
+                    logger.info(f"🗑️ Cleaned up: {os.path.basename(temp_file)}")
+                    
+            # Clean up any orphaned audio files (older than 5 minutes)
+            import time
+            current_time = time.time()
+            temp_dir = get_temp_path("")
+            audio_pattern = os.path.join(temp_dir, "review_gate_audio_*.wav")
+            
+            for audio_file in glob.glob(audio_pattern):
+                try:
+                    file_age = current_time - os.path.getmtime(audio_file)
+                    if file_age > 300:  # 5 minutes
+                        Path(audio_file).unlink()
+                        logger.info(f"🗑️ Cleaned up old audio file: {os.path.basename(audio_file)}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Could not clean up audio file {audio_file}: {cleanup_error}")
+                    
         except Exception as e:
             logger.warning(f"⚠️ Cleanup warning: {e}")
         
@@ -910,27 +982,66 @@ class ReviewGateServer:
         return True
 
     def _start_speech_monitoring(self):
-        """Start monitoring for speech-to-text trigger files"""
+        """Start monitoring for speech-to-text trigger files with enhanced error handling"""
+        self._speech_monitoring_active = False
+        self._speech_thread = None
+        
         def monitor_speech_triggers():
+            """Enhanced speech monitoring with health checks and better error handling"""
+            monitor_start_time = time.time()
+            processed_count = 0
+            error_count = 0
+            last_heartbeat = time.time()
+            
+            logger.info("🎤 Speech monitoring thread started successfully")
+            self._speech_monitoring_active = True
+            
             while not self.shutdown_requested:
                 try:
-                    # Look for speech trigger files
-                    speech_triggers = glob.glob(os.path.join(tempfile.gettempdir(), "review_gate_speech_trigger_*.json"))
+                    current_time = time.time()
+                    
+                    # Heartbeat logging every 60 seconds
+                    if current_time - last_heartbeat > 60:
+                        uptime = int(current_time - monitor_start_time)
+                        logger.info(f"💓 Speech monitor heartbeat - Uptime: {uptime}s, Processed: {processed_count}, Errors: {error_count}")
+                        last_heartbeat = current_time
+                    
+                    # Look for speech trigger files using cross-platform temp path
+                    temp_dir = get_temp_path("")
+                    speech_triggers = glob.glob(os.path.join(temp_dir, "review_gate_speech_trigger_*.json"))
                     
                     for trigger_file in speech_triggers:
                         try:
-                            with open(trigger_file, 'r') as f:
+                            # Validate file exists and is readable
+                            if not os.path.exists(trigger_file):
+                                continue
+                                
+                            with open(trigger_file, 'r', encoding='utf-8') as f:
                                 trigger_data = json.load(f)
                             
                             if trigger_data.get('data', {}).get('tool') == 'speech_to_text':
-                                logger.info(f"🎤 Processing speech-to-text request: {trigger_file}")
+                                logger.info(f"🎤 Processing speech-to-text request: {os.path.basename(trigger_file)}")
                                 self._process_speech_request(trigger_data)
+                                processed_count += 1
                                 
-                                # Clean up trigger file
-                                Path(trigger_file).unlink()
+                                # Clean up trigger file safely
+                                try:
+                                    Path(trigger_file).unlink()
+                                    logger.debug(f"🗑️ Cleaned up trigger file: {os.path.basename(trigger_file)}")
+                                except Exception as cleanup_error:
+                                    logger.warning(f"⚠️ Could not clean up trigger file: {cleanup_error}")
+                                
+                        except json.JSONDecodeError as json_error:
+                            logger.error(f"❌ Invalid JSON in speech trigger {trigger_file}: {json_error}")
+                            error_count += 1
+                            try:
+                                Path(trigger_file).unlink()  # Remove invalid file
+                            except:
+                                pass
                                 
                         except Exception as e:
                             logger.error(f"❌ Error processing speech trigger {trigger_file}: {e}")
+                            error_count += 1
                             try:
                                 Path(trigger_file).unlink()
                             except:
@@ -939,14 +1050,37 @@ class ReviewGateServer:
                     time.sleep(0.5)  # Check every 500ms
                     
                 except Exception as e:
-                    logger.error(f"❌ Speech monitoring error: {e}")
-                    time.sleep(1)
+                    logger.error(f"❌ Critical speech monitoring error: {e}")
+                    error_count += 1
+                    time.sleep(2)  # Longer wait on critical errors
+                    
+                    # If too many errors, consider restarting
+                    if error_count > 10:
+                        logger.warning("⚠️ Too many speech monitoring errors - attempting recovery")
+                        time.sleep(5)
+                        error_count = 0  # Reset error count after recovery pause
+            
+            self._speech_monitoring_active = False
+            logger.info("🛑 Speech monitoring thread stopped")
         
-        # Start monitoring in background thread
-        import threading
-        speech_thread = threading.Thread(target=monitor_speech_triggers, daemon=True)
-        speech_thread.start()
-        logger.info("🎤 Speech-to-text monitoring started")
+        try:
+            # Start monitoring in background thread
+            import threading
+            self._speech_thread = threading.Thread(target=monitor_speech_triggers, daemon=True)
+            self._speech_thread.name = "ReviewGate-SpeechMonitor"
+            self._speech_thread.start()
+            
+            # Verify thread started successfully
+            time.sleep(0.1)  # Give thread time to start
+            if self._speech_thread.is_alive():
+                logger.info("✅ Speech-to-text monitoring started successfully")
+            else:
+                logger.error("❌ Speech monitoring thread failed to start")
+                self._speech_monitoring_active = False
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to start speech monitoring thread: {e}")
+            self._speech_monitoring_active = False
 
     def _process_speech_request(self, trigger_data):
         """Process speech-to-text request"""
@@ -959,8 +1093,9 @@ class ReviewGateServer:
                 return
             
             if not self._whisper_model:
-                logger.error("❌ Whisper model not available")
-                self._write_speech_response(trigger_id, "", "Whisper model not available")
+                error_detail = self._whisper_error or "Whisper model not available"
+                logger.error(f"❌ Whisper model not available: {error_detail}")
+                self._write_speech_response(trigger_id, "", f"Speech-to-text unavailable: {error_detail}")
                 return
             
             if not os.path.exists(audio_file):
@@ -979,10 +1114,17 @@ class ReviewGateServer:
             # Write response
             self._write_speech_response(trigger_id, transcription)
             
-            # Clean up audio file
+            # Clean up audio file (MCP server is responsible for this)
             try:
-                Path(audio_file).unlink()
-                logger.info(f"🗑️ Cleaned up audio file: {audio_file}")
+                # Small delay to ensure any pending file operations complete
+                import time
+                time.sleep(0.1)
+                
+                if Path(audio_file).exists():
+                    Path(audio_file).unlink()
+                    logger.info(f"🗑️ Cleaned up audio file: {os.path.basename(audio_file)}")
+                else:
+                    logger.debug(f"Audio file already cleaned up: {os.path.basename(audio_file)}")
             except Exception as e:
                 logger.warning(f"⚠️ Could not clean up audio file: {e}")
                 
@@ -1011,6 +1153,26 @@ class ReviewGateServer:
             
         except Exception as e:
             logger.error(f"❌ Failed to write speech response: {e}")
+
+    def get_speech_monitoring_status(self):
+        """Get comprehensive status of speech monitoring system"""
+        status = {
+            "speech_monitoring_active": getattr(self, '_speech_monitoring_active', False),
+            "speech_thread_alive": getattr(self, '_speech_thread', None) and self._speech_thread.is_alive(),
+            "whisper_model_loaded": self._whisper_model is not None,
+            "whisper_error": getattr(self, '_whisper_error', None),
+            "faster_whisper_available": WHISPER_AVAILABLE
+        }
+        
+        # Log status if there are issues
+        if not status["speech_monitoring_active"]:
+            logger.warning("⚠️ Speech monitoring is not active")
+        if not status["speech_thread_alive"]:
+            logger.warning("⚠️ Speech monitoring thread is not running")
+        if not status["whisper_model_loaded"]:
+            logger.warning(f"⚠️ Whisper model not loaded: {status['whisper_error']}")
+        
+        return status
 
 async def main():
     """Main entry point for Review Gate v2 with immediate activation"""
