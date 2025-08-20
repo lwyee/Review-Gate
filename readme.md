@@ -23,33 +23,23 @@ I evolved this system for our beloved Cursor IDE to transform my (and your!) AI 
 
 ```mermaid
 graph TD
-    A[User Gives Complex Task] --> B[Cursor Agent Processes]
+    A[User Gives Complex Task] --> B[Cursor Agent Processes Task]
     B --> C[Review Gate Rule Activates]
-    C --> D[Agent Calls review_gate_chat MCP Tool]
-    D --> E[MCP Server Creates Trigger File]
-    E --> F[Extension Monitors File System]
-    F --> G[Popup Interface Appears]
-    G --> H{User Input Type}
-    H -->|Text| I[Type Follow-up Commands]
-    H -->|Voice| J[Speech-to-Text with Whisper]
-    H -->|Images| K[Upload Screenshots/Mockups]
-    I --> L[Response File Created]
-    J --> L
-    K --> L
-    L --> M[MCP Server Reads Response]
-    M --> N[Agent Continues with More Tool Calls]
-    N --> O{Task Complete?}
-    O -->|No| G
-    O -->|Yes| P[Single Request Delivers 5x Value]
+    C --> D[Popup Interface Appears]
+    D --> E[Multi-Modal User Input]
+    E --> E1[Text Commands]
+    E --> E2[Voice Input]
+    E --> E3[Image Upload]
+    E1 --> F[Agent Continues with More Actions]
+    E2 --> F
+    E3 --> F
+    F --> G{Task Complete?}
+    G -->|No| D
+    G -->|Yes| H[Single Request Delivers 5x Value]
     
-    style D fill:#ff9500
-    style G fill:#ff9500
-    style P fill:#90EE90
 ```
 
-## Quick Demo
 
-[![Review Gate V2 Demo](assets/snippet.png)](https://www.youtube.com/watch?v=mZmNM-AIf4M)
 
 ## Features Comparison
 
