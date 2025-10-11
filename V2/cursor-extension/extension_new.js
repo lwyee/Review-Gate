@@ -1,4 +1,3 @@
-// 支持消息显示
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
@@ -23,6 +22,127 @@ let statusCheckInterval = null;
 let currentTriggerData = null;
 let currentRecording = null;
 let displayedMcpMessages = new Set(); // 跟踪已显示的MCP消息
+let timeoutTimer = null; // 超时计时器
+let countdownInterval = null; // 倒计时更新间隔
+
+// 获取配置信息
+function getTimeoutConfig() {
+    const config = vscode.workspace.getConfiguration('reviewGate');
+    return {
+        enabled: config.get('timeout.enabled', false),
+        duration: config.get('timeout.duration', 300),
+        selectedTemplate: config.get('timeout.selectedTemplate', 'CONTINUE'),
+        customMessage: config.get('timeout.customMessage', '继续执行，我会在需要时提供反馈。'),
+        showCountdown: config.get('timeout.showCountdown', true),
+        templates: config.get('messageTemplates', {
+            TASK_COMPLETE: 'TASK_COMPLETE - 任务已完成，可以继续下一步。',
+            CONTINUE: '继续执行当前操作，我会在需要时提供反馈。',
+            NEED_MORE_TIME: '我需要更多时间来审查，请稍等片刻。',
+            REVIEWING: '正在审查中，稍后会提供详细反馈。'
+        })
+    };
+}
+
+// 获取要发送的超时消息
+function getTimeoutMessage() {
+    const config = getTimeoutConfig();
+    
+    if (config.selectedTemplate === 'CUSTOM') {
+        return config.customMessage;
+    }
+    
+    return config.templates[config.selectedTemplate] || config.templates.CONTINUE;
+}
+
+// 清除超时计时器
+function clearTimeoutTimers() {
+    if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+        console.log('⏰ Timeout timer cleared');
+    }
+    
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+        console.log('⏱️ Countdown interval cleared');
+    }
+}
+
+// 启动超时计时器
+function startTimeoutTimer(triggerId, mcpIntegration, specialHandling) {
+    // 先清除之前的计时器
+    clearTimeoutTimers();
+    
+    const config = getTimeoutConfig();
+    
+    // 如果未启用超时功能，则不启动
+    if (!config.enabled) {
+        console.log('⏰ Timeout feature is disabled');
+        return;
+    }
+    
+    const durationMs = config.duration * 1000;
+    const startTime = Date.now();
+    
+    console.log(`⏰ Starting timeout timer: ${config.duration} seconds`);
+    console.log(`📝 Selected template: ${config.selectedTemplate}`);
+    console.log(`💬 Timeout message: ${getTimeoutMessage()}`);
+    
+    // 如果启用倒计时显示，每秒更新一次
+    if (config.showCountdown && chatPanel) {
+        countdownInterval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, Math.ceil((durationMs - elapsed) / 1000));
+            
+            if (chatPanel) {
+                chatPanel.webview.postMessage({
+                    command: 'updateCountdown',
+                    remaining: remaining,
+                    total: config.duration
+                });
+            }
+        }, 1000);
+    }
+    
+    // 设置超时自动发送
+    timeoutTimer = setTimeout(() => {
+        console.log('⏰ Timeout reached - auto-sending template message');
+        
+        const message = getTimeoutMessage();
+        
+        // 记录超时自动发送 - 使用 MCP_RESPONSE 事件类型保持一致
+        const eventType = mcpIntegration ? 'MCP_RESPONSE' : 'TIMEOUT_AUTO_SEND';
+        logUserInput(message, eventType, triggerId, []);
+        
+        // 在聊天面板显示自动发送的消息（与用户发送保持一致的格式）
+        if (chatPanel) {
+            chatPanel.webview.postMessage({
+                command: 'addMessage',
+                text: message,
+                type: 'user',
+                plain: false
+            });
+            
+            // 显示提示消息（使用plain样式，不阻塞流程）
+            setTimeout(() => {
+                chatPanel.webview.postMessage({
+                    command: 'addMessage',
+                    text: '⏰ 超时自动发送',
+                    type: 'system',
+                    plain: true
+                });
+            }, 300);
+        }
+        
+        // 调用消息处理函数（与用户手动发送保持完全一致）
+        handleReviewMessage(message, [], triggerId, mcpIntegration, specialHandling);
+        
+        // 清除计时器
+        clearTimeoutTimers();
+        
+    }, durationMs);
+}
 
 function activate(context) {
     console.log('Review Gate V2 extension is now active in Cursor for MCP integration!');
@@ -565,6 +685,11 @@ function openReviewGatePopup(context, options = {}) {
             }, 100);
         }
         
+        // Start timeout timer when opening for MCP integration
+        if (mcpIntegration && triggerId) {
+            startTimeoutTimer(triggerId, mcpIntegration, specialHandling);
+        }
+        
         // Don't send redundant messages to existing panels
         // The initial ready handler will show the message if needed
         
@@ -605,6 +730,8 @@ function openReviewGatePopup(context, options = {}) {
             
             switch (webviewMessage.command) {
                 case 'send':
+                    // 清除超时计时器（用户主动发送了消息）
+                    clearTimeoutTimers();
                     
                     // Log the user input and write response file for MCP integration
                     const eventType = mcpIntegration ? 'MCP_RESPONSE' : 'REVIEW_SUBMITTED';
@@ -673,11 +800,17 @@ function openReviewGatePopup(context, options = {}) {
         () => {
             chatPanel = null;
             currentTriggerData = null;
+            clearTimeoutTimers(); // 清除超时计时器
         },
         null,
         context.subscriptions
     );
 
+    // Start timeout timer when creating new panel for MCP integration
+    if (mcpIntegration && triggerId) {
+        startTimeoutTimer(triggerId, mcpIntegration, specialHandling);
+    }
+    
     // Auto-focus if requested
     if (autoFocus) {
         setTimeout(() => {
@@ -744,6 +877,41 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             font-size: 18px;
             font-weight: 600;
             color: var(--vscode-foreground);
+        }
+        
+        .countdown-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            margin-left: 12px;
+            padding: 4px 12px;
+            background: rgba(255, 165, 0, 0.1);
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            border-radius: 12px;
+        }
+        
+        .countdown-container.active {
+            display: flex;
+        }
+        
+        .countdown-label {
+            font-size: 10px;
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .countdown-time {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--vscode-charts-orange);
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        
+        .countdown-time.warning {
+            color: var(--vscode-charts-red);
+            animation: pulse 1s infinite;
         }
         
         .review-author {
@@ -1146,6 +1314,10 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
     <div class="review-container">
         <div class="review-header">
             <div class="review-title">${title}</div>
+            <div class="countdown-container" id="countdownContainer">
+                <div class="countdown-label">Auto-send in</div>
+                <div class="countdown-time" id="countdownTime">--:--</div>
+            </div>
             <div class="status-indicator" id="statusIndicator"></div>
             <div class="mcp-status" id="mcpStatus">Checking MCP...</div>
             <div class="review-author">by Lakshman Turlapati</div>
@@ -1190,6 +1362,8 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         const statusIndicator = document.getElementById('statusIndicator');
         const mcpStatus = document.getElementById('mcpStatus');
         const inputContainer = document.getElementById('inputContainer');
+        const countdownContainer = document.getElementById('countdownContainer');
+        const countdownTime = document.getElementById('countdownTime');
         
         let messageCount = 0;
         let mcpActive = true; // Default to true for better UX
@@ -1217,6 +1391,35 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                 sendButton.disabled = true;
                 attachButton.disabled = true;
                 messageInput.placeholder = 'MCP server is not active. Please start the server to enable input.';
+            }
+        }
+        
+        function updateCountdown(remaining, total) {
+            if (remaining <= 0) {
+                // Hide countdown when time is up
+                countdownContainer.classList.remove('active');
+                return;
+            }
+            
+            // Show countdown container
+            countdownContainer.classList.add('active');
+            
+            // Format time as MM:SS
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            const timeString = \`\${String(minutes).padStart(2, '0')}:\${String(seconds).padStart(2, '0')}\`;
+            countdownTime.textContent = timeString;
+            
+            // Add warning class when less than 30 seconds remaining
+            if (remaining <= 30) {
+                countdownTime.classList.add('warning');
+            } else {
+                countdownTime.classList.remove('warning');
+            }
+            
+            // Log countdown updates (throttled)
+            if (remaining % 10 === 0 || remaining <= 10) {
+                console.log(\`⏰ Countdown: \${timeString} remaining\`);
             }
         }
         
@@ -1292,6 +1495,9 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         function sendMessage() {
             const text = messageInput.value.trim();
             if (!text && attachedImages.length === 0) return;
+            
+            // Hide countdown when user sends message
+            countdownContainer.classList.remove('active');
             
             // Create message with text and images
             let displayMessage = text;
@@ -1669,6 +1875,9 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                     break;
                 case 'updateMcpStatus':
                     updateMcpStatus(message.active);
+                    break;
+                case 'updateCountdown':
+                    updateCountdown(message.remaining, message.total);
                     break;
                 case 'imageUploaded':
                     handleImageUploaded(message.imageData);
@@ -2371,6 +2580,9 @@ function deactivate() {
     if (statusCheckInterval) {
         clearInterval(statusCheckInterval);
     }
+    
+    // 清除超时计时器
+    clearTimeoutTimers();
     
     if (outputChannel) {
         outputChannel.dispose();
