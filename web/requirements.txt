@@ -1,0 +1,15 @@
+# Review Gate V2 Web - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# MCP (Model Context Protocol) - Core requirement
+mcp>=1.9.2
+
+# Web server and WebSocket support
+aiohttp>=3.9.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Type hints support
+typing-extensions>=4.14.0
+
