@@ -335,4 +335,4 @@ MIT License
 ## 👤 作者
 
 - 原作者: Lakshman Turlapati
-- Web 版本扩展: AI Assistant
+- Web 版本扩展: None
