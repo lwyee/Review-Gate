@@ -31,6 +31,17 @@ from dataclasses import dataclass, field
 # Import message storage
 from message_store import MessageStorage, MessageRecord
 
+# Import configuration from config.py
+from config import (
+    DEFAULT_WEB_PORT,
+    DEFAULT_HOST,
+    DEFAULT_SETTINGS,
+    WebServerConfig,
+    load_user_settings,
+    save_user_settings,
+    safe_log,
+)
+
 # Fix Windows console encoding for Chinese characters
 if sys.platform == 'win32':
     try:
@@ -62,74 +73,6 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-
-# Configuration
-DEFAULT_WEB_PORT = 8765
-DEFAULT_HOST = "127.0.0.1"
-
-# User settings file path
-def get_settings_file_path() -> str:
-    """Get the path to the user settings file"""
-    if os.name == 'nt':  # Windows
-        app_data = os.environ.get('APPDATA', os.path.expanduser('~'))
-        settings_dir = os.path.join(app_data, 'ReviewGateV2')
-    else:  # macOS and Linux
-        settings_dir = os.path.expanduser('~/.config/review-gate-v2')
-    
-    os.makedirs(settings_dir, exist_ok=True)
-    return os.path.join(settings_dir, 'settings.json')
-
-def load_user_settings() -> Dict[str, Any]:
-    """Load user settings from local file"""
-    settings_file = get_settings_file_path()
-    default_settings = {
-        'timeout': 300,
-        'auto_message': '继续',
-        'theme': 'dark'
-    }
-    
-    try:
-        if os.path.exists(settings_file):
-            with open(settings_file, 'r', encoding='utf-8') as f:
-                saved_settings = json.load(f)
-                # Merge with defaults
-                default_settings.update(saved_settings)
-    except Exception as e:
-        logger.warning(safe_log(f"Failed to load settings: {e}"))
-    
-    return default_settings
-
-def save_user_settings(settings: Dict[str, Any]) -> bool:
-    """Save user settings to local file"""
-    settings_file = get_settings_file_path()
-    
-    try:
-        with open(settings_file, 'w', encoding='utf-8') as f:
-            json.dump(settings, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        logger.error(safe_log(f"Failed to save settings: {e}"))
-        return False
-
-
-def safe_log(message: str) -> str:
-    """Safely encode message for logging on Windows"""
-    if sys.platform == 'win32':
-        try:
-            return message.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
-        except Exception:
-            return message.encode('ascii', errors='replace').decode('ascii', errors='replace')
-    return message
-
-
-@dataclass
-class WebServerConfig:
-    """Configuration for the web server"""
-    host: str = DEFAULT_HOST
-    port: int = DEFAULT_WEB_PORT
-    auto_open_browser: bool = True
-    timeout_duration: int = 300  # 5 minutes default
-    show_countdown: bool = True
 
 
 @dataclass
