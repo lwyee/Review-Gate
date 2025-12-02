@@ -56,56 +56,32 @@ from mcp.types import (
     ImageContent,
 )
 
+# Import configuration from config.py
+from config import (
+    DEFAULT_WEB_PORT,
+    DEFAULT_HOST,
+    DEFAULT_SETTINGS,
+    WebServerConfig,
+    load_user_settings,
+    get_effective_settings,
+    create_web_config,
+    safe_log,
+)
+
 # Import web server
 try:
     from web_server import (
         ReviewGateWebServer,
-        WebServerConfig,
         get_web_server,
-        load_user_settings,
         start_web_server,
         stop_web_server,
         AIOHTTP_AVAILABLE,
-        safe_log
     )
     WEB_SERVER_AVAILABLE = True
 except ImportError as e:
     WEB_SERVER_AVAILABLE = False
     AIOHTTP_AVAILABLE = False
     print(f"Warning: Web server module not available: {e}", file=sys.stderr)
-    
-    def safe_log(msg):
-        """Fallback safe_log function"""
-        if sys.platform == 'win32':
-            try:
-                return msg.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
-            except Exception:
-                return msg.encode('ascii', errors='replace').decode('ascii', errors='replace')
-        return msg
-
-    def load_user_settings():
-        """Fallback load_user_settings function"""
-        import json
-        default_settings = {
-            'timeout': 300,
-            'auto_message': '继续',
-            'theme': 'dark'
-        }
-        try:
-            if os.name == 'nt':
-                app_data = os.environ.get('APPDATA', os.path.expanduser('~'))
-                settings_dir = os.path.join(app_data, 'ReviewGateV2')
-            else:
-                settings_dir = os.path.expanduser('~/.config/review-gate-v2')
-            
-            settings_file = os.path.join(settings_dir, 'settings.json')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r', encoding='utf-8') as f:
-                    saved_settings = json.load(f)
-                    default_settings.update(saved_settings)
-        except Exception:
-            pass
-        return default_settings
 
 
 # Cross-platform temp directory helper
@@ -165,24 +141,26 @@ logger = logging.getLogger(__name__)
 class ReviewGateServerWeb:
     """Review Gate MCP Server with integrated Web Interface"""
     
-    def __init__(self, web_config: Optional[WebServerConfig] = None):
+    def __init__(self, web_config: Optional[WebServerConfig] = None, cli_args=None):
         self.server = Server("review-gate-v2")
         self.setup_handlers()
         self.shutdown_requested = False
         self.shutdown_reason = ""
         self._last_attachments = []
+        
+        # Store command line arguments for override
+        self.cli_args = cli_args
 
-        # Web server configuration
-        self.web_config = web_config or WebServerConfig(
-            host="127.0.0.1",
-            port=8765,
-            auto_open_browser=True,
-            timeout_duration=300
-        )
+        # Web server configuration (使用 config.py 中的默认值)
+        self.web_config = web_config or WebServerConfig()
         self.web_server: Optional[ReviewGateWebServer] = None
         
         logger.info(safe_log("Review Gate 2.0 Web Server initialized"))
         logger.info(safe_log(f"Web interface will be available at http://{self.web_config.host}:{self.web_config.port}"))
+    
+    def _get_effective_settings(self) -> dict:
+        """Get settings with command line overrides applied (使用 config.py)"""
+        return get_effective_settings(self.cli_args)
 
 
     def setup_handlers(self):
@@ -255,12 +233,25 @@ class ReviewGateServerWeb:
         
         logger.info(safe_log(f"Review Gate chat request: {message[:100]}..."))
         
-        # Try web interface first
-        if self.web_server and self.web_server.is_running and self.web_server.client_count > 0:
+        # Load user settings with command line overrides applied
+        user_settings = self._get_effective_settings()
+        use_web_interface = user_settings.get('use_web_interface', True)
+        
+        # Log effective settings
+        logger.info(safe_log(f"Effective settings: use_web_interface={use_web_interface}"))
+        
+        # Check if user wants to use web interface and if it's available
+        web_available = self.web_server and self.web_server.is_running and self.web_server.client_count > 0
+        
+        if not use_web_interface:
+            logger.info(safe_log("Using file-based communication (use_web_interface=False)"))
+            return await self._handle_review_gate_chat_file(args, trigger_id)
+        
+        # Try web interface if configured and available
+        if web_available:
             logger.info(safe_log(f"Using web interface ({self.web_server.client_count} clients connected)"))
             
-            # Load user-configured timeout for countdown display only
-            user_settings = load_user_settings()
+            # Get timeout from effective settings
             countdown_duration = user_settings.get('timeout', 300)
             logger.info(safe_log(f"Countdown display duration: {countdown_duration} seconds (MCP waits indefinitely)"))
             
@@ -303,7 +294,12 @@ class ReviewGateServerWeb:
                 return [TextContent(type="text", text="TIMEOUT: No user input received within 5 minutes")]
         
         # Fallback to file-based communication (for VSCode extension compatibility)
-        logger.info(safe_log("Using file-based communication (no web clients connected)"))
+        if not self.web_server:
+            logger.info(safe_log("Using file-based communication (web server not initialized)"))
+        elif not self.web_server.is_running:
+            logger.info(safe_log("Using file-based communication (web server not running)"))
+        else:
+            logger.info(safe_log("Using file-based communication (no web clients connected)"))
         return await self._handle_review_gate_chat_file(args, trigger_id)
 
     async def _handle_review_gate_chat_file(self, args: dict, trigger_id: str) -> list[TextContent]:
@@ -585,20 +581,31 @@ async def main():
     # Parse command line arguments
     import argparse
     parser = argparse.ArgumentParser(description='Review Gate V2 MCP Server with Web Interface')
-    parser.add_argument('--host', default='127.0.0.1', help='Web server host (default: 127.0.0.1)')
-    parser.add_argument('--port', type=int, default=8765, help='Web server port (default: 8765)')
+    parser.add_argument('--host', default=DEFAULT_HOST, help=f'Web server host (default: {DEFAULT_HOST})')
+    parser.add_argument('--port', type=int, default=DEFAULT_WEB_PORT, help=f'Web server port (default: {DEFAULT_WEB_PORT})')
     parser.add_argument('--no-browser', action='store_true', help='Do not auto-open browser')
+    parser.add_argument('--use-web-interface', type=str, choices=['true', 'false'], 
+                       help='Force use web interface (true) or VSCode plugin (false). Overrides settings file.')
+    parser.add_argument('--timeout', type=int, help='Countdown timeout in seconds (30-600)')
+    parser.add_argument('--auto-message', type=str, help='Auto message to send on timeout')
     
     args, unknown = parser.parse_known_args()
     
-    web_config = WebServerConfig(
-        host=args.host,
-        port=args.port,
-        auto_open_browser=not args.no_browser
-    ) if WEB_SERVER_AVAILABLE else None
+    # Log command line arguments
+    logger.info(safe_log(f"Command line args: host={args.host}, port={args.port}, no_browser={args.no_browser}"))
+    if args.use_web_interface:
+        logger.info(safe_log(f"  use_web_interface={args.use_web_interface} (from command line)"))
+    if args.timeout:
+        logger.info(safe_log(f"  timeout={args.timeout} (from command line)"))
+    if args.auto_message:
+        logger.info(safe_log(f"  auto_message={args.auto_message} (from command line)"))
     
+    # Create web config using config.py helper
+    web_config = create_web_config(args) if WEB_SERVER_AVAILABLE else None
+    
+    # Create server with command line overrides
     try:
-        server = ReviewGateServerWeb(web_config)
+        server = ReviewGateServerWeb(web_config, args)
         await server.run()
     except Exception as e:
         logger.error(safe_log(f"Fatal error: {e}"))
